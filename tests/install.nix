@@ -49,7 +49,11 @@ let
 
   installer = self.lib.mkInstaller {
     inherit target;
-    modules = [ testInstrumentation ];
+    modules = [
+      testInstrumentation
+      # Level 19 takes minutes to compress and gains nothing in a test.
+      { isoImage.squashfsCompression = "zstd -Xcompression-level 3"; }
+    ];
   };
 
   iso = installer.config.system.build.isoImage;
