@@ -195,7 +195,8 @@ in
           serviceConfig = {
             Type = "oneshot";
             RemainAfterExit = true;
-            ExecStart = "${pkgs.coreutils}/bin/install -d -m 1777 -o root -g root ${cfg.tmp.path}";
+            # Numeric IDs: this runs before userborn has written /etc/passwd.
+            ExecStart = "${pkgs.coreutils}/bin/install -d -m 1777 -o 0 -g 0 ${cfg.tmp.path}";
           };
         };
 
