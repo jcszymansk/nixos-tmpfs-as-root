@@ -124,6 +124,8 @@ pkgs.testers.runNixOSTest {
         out = installer.succeed(f"{install_command} 2>&1")
         print(out)
         assert "machine-id: " in out
+        assert "Activation script snippet" not in out, "activation failed in the chroot"
+        assert "chown: invalid user" not in out, "the chroot had no account databases"
         installer.fail("test -e ${target.config.stateless.disk.encryption.passwordFile}")
         installer.shutdown()
 

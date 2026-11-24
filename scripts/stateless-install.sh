@@ -264,12 +264,22 @@ if [[ $accounts_persist == true ]]; then
     printf '%s\n' "${hashed_entries[@]}" | chpasswd --encrypted --prefix "$persist_root" || die "setting passwords failed"
     log "set passwords for: $(printf '%s ' "${hashed_entries[@]%%:*}")"
   fi
+  # Same as stateless-restore-account-files at boot: the activation that
+  # nixos-install runs in the chroot needs users and groups to chown with.
+  install -d -m 0755 "$mount_root/etc"
+  for name in passwd group shadow; do
+    cp --preserve=mode,ownership,timestamps "$persist_root/etc/$name" "$mount_root/etc/$name" ||
+      die "copying $name into $mount_root/etc failed"
+  done
 fi
 
 # --------------------------------------------------------- 5. nixos-install
 
 log "installing $toplevel"
-nixos-install --root "$mount_root" --system "$toplevel" --no-root-passwd --no-channel-copy || die "nixos-install failed"
+# Everything is on the ISO; without this, Nix probes the binary cache and
+# stalls on machines with no network.
+nixos-install --root "$mount_root" --system "$toplevel" --no-root-passwd --no-channel-copy \
+  --option substituters "" || die "nixos-install failed"
 
 sync
 umount --recursive "$mount_root" || die "unmounting $mount_root failed"
