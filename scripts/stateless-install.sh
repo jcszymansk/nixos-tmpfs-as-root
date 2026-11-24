@@ -2,8 +2,8 @@
 #
 # The variables host_name, device, mount_root, disko_script, toplevel,
 # persist_path, tmp_path, encrypted, luks_password_file, require_efi,
-# accounts_persist, userborn_config, password_users, openssh_enabled and
-# host_key_specs are prepended by modules/installer.nix.
+# accounts_persist, mutable_users, userborn_config, password_users,
+# openssh_enabled and host_key_specs are prepended by modules/installer.nix.
 #
 # Steps:
 #   1. check preconditions and confirm the wipe
@@ -254,23 +254,38 @@ if [[ $openssh_enabled == true ]]; then
   done
 fi
 
-if [[ $accounts_persist == true ]]; then
-  log "creating account databases in $persist_path/etc"
-  # A fresh disk has no previous config; userborn falls back to the current
-  # one when the file is missing, which disables nothing.
-  USERBORN_MUTABLE_USERS=true USERBORN_PREVIOUS_CONFIG="$secrets_dir/no-previous-userborn.json" \
-    userborn "$userborn_config" "$persist_root/etc" || die "userborn failed"
+# nixos-install activates the system in a chroot that needs users and groups
+# to chown with; with userborn nothing creates them there. When accounts
+# persist, generate them in persistence and copy them in, as
+# stateless-restore-account-files does at boot.
+if [[ -n $userborn_config ]]; then
+  if [[ $accounts_persist == true ]]; then
+    accounts_dir="$persist_root/etc"
+  else
+    accounts_dir="$mount_root/etc"
+  fi
+  log "creating account databases in ${accounts_dir#"$mount_root"}"
+  install -d -m 0755 "$accounts_dir"
+  userborn_env=(USERBORN_MUTABLE_USERS="$mutable_users")
+  if [[ $mutable_users == true ]]; then
+    # A fresh disk has no previous config; userborn falls back to the
+    # current one when the file is missing, which disables nothing.
+    userborn_env+=(USERBORN_PREVIOUS_CONFIG="$secrets_dir/no-previous-userborn.json")
+  fi
+  env "${userborn_env[@]}" userborn "$userborn_config" "$accounts_dir" || die "userborn failed"
+
   if [[ ${#hashed_entries[@]} -gt 0 ]]; then
-    printf '%s\n' "${hashed_entries[@]}" | chpasswd --encrypted --prefix "$persist_root" || die "setting passwords failed"
+    printf '%s\n' "${hashed_entries[@]}" | chpasswd --encrypted --prefix "$(dirname "$accounts_dir")" || die "setting passwords failed"
     log "set passwords for: $(printf '%s ' "${hashed_entries[@]%%:*}")"
   fi
-  # Same as stateless-restore-account-files at boot: the activation that
-  # nixos-install runs in the chroot needs users and groups to chown with.
-  install -d -m 0755 "$mount_root/etc"
-  for name in passwd group shadow; do
-    cp --preserve=mode,ownership,timestamps "$persist_root/etc/$name" "$mount_root/etc/$name" ||
-      die "copying $name into $mount_root/etc failed"
-  done
+
+  if [[ $accounts_persist == true ]]; then
+    install -d -m 0755 "$mount_root/etc"
+    for name in passwd group shadow; do
+      cp --preserve=mode,ownership,timestamps "$accounts_dir/$name" "$mount_root/etc/$name" ||
+        die "copying $name into $mount_root/etc failed"
+    done
+  fi
 fi
 
 # --------------------------------------------------------- 5. nixos-install

@@ -57,7 +57,8 @@ let
         luks_password_file = target.stateless.disk.encryption.passwordFile;
         require_efi = lib.boolToString target.boot.loader.systemd-boot.enable;
         accounts_persist = lib.boolToString target.stateless.accounts.persist;
-        userborn_config = if target.stateless.accounts.persist then userbornConfig else "";
+        mutable_users = lib.boolToString target.users.mutableUsers;
+        userborn_config = if target.services.userborn.enable then userbornConfig else "";
         password_users = cfg.passwordUsers;
         openssh_enabled = lib.boolToString target.services.openssh.enable;
         host_key_specs = hostKeySpecs;
