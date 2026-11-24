@@ -18,6 +18,9 @@ let
 
   luksPassphrase = "correct horse battery staple";
   encrypted = disk.encryption.enable or false;
+  nixFsType = disk.nixFsType or "ext4";
+  hasSwap = (disk.swap.size or null) != null;
+  pyBool = b: if b then "True" else "False";
 
   testInstrumentation = "${pkgs.path}/nixos/modules/testing/test-instrumentation.nix";
 
@@ -61,6 +64,10 @@ pkgs.testers.runNixOSTest {
     import subprocess
     import tempfile
 
+    ENCRYPTED = ${pyBool encrypted}
+    NIX_FS_TYPE = "${nixFsType}"
+    HAS_SWAP = ${pyBool hasSwap}
+    LUKS_PASSPHRASE = "${luksPassphrase}"
     state = tempfile.mkdtemp()
     disk_image = os.path.join(state, "disk.qcow2")
     efi_vars = os.path.join(state, "OVMF_VARS.fd")
@@ -84,10 +91,9 @@ pkgs.testers.runNixOSTest {
     def boot_installed(name: str):
         m = create_machine(start_command(False), name=name)
         m.start()
-        ${lib.optionalString encrypted ''
-          m.wait_for_console_text("Please enter passphrase")
-          m.send_console("${luksPassphrase}\n")
-        ''}
+        if ENCRYPTED:
+            m.wait_for_console_text("Please enter passphrase")
+            m.send_console(f"{LUKS_PASSPHRASE}\n")
         m.wait_for_unit("multi-user.target")
         return m
 
@@ -110,11 +116,12 @@ pkgs.testers.runNixOSTest {
         installer.start()
         installer.wait_for_unit("multi-user.target")
         installer.succeed("printf 'root:rootpw\\nalice:alicepw\\n' > /run/passwords")
-        ${lib.optionalString encrypted ''installer.succeed("printf '%s\\n' '${luksPassphrase}' > /run/luks")''}
+        install_command = "stateless-install --yes --passwords-file /run/passwords"
+        if ENCRYPTED:
+            installer.succeed(f"printf '%s\\n' '{LUKS_PASSPHRASE}' > /run/luks")
+            install_command += " --luks-passphrase-file /run/luks"
         installer.fail("stateless-install --yes --bogus")
-        out = installer.succeed(
-            "stateless-install --yes --passwords-file /run/passwords ${lib.optionalString encrypted "--luks-passphrase-file /run/luks"} 2>&1"
-        )
+        out = installer.succeed(f"{install_command} 2>&1")
         print(out)
         assert "machine-id: " in out
         installer.fail("test -e ${target.config.stateless.disk.encryption.passwordFile}")
@@ -125,20 +132,14 @@ pkgs.testers.runNixOSTest {
         root = machine.succeed("findmnt -n -o FSTYPE,OPTIONS /").split()
         assert root[0] == "tmpfs", root
         assert machine.succeed("stat -c %a /").strip() == "755"
-        assert machine.succeed("findmnt -n -o FSTYPE /nix").strip() == "${disk.nixFsType or "ext4"}"
-        ${lib.optionalString ((disk.nixFsType or "ext4") == "btrfs") ''
-          assert "compress-force=zstd" in machine.succeed("findmnt -n -o OPTIONS /nix")
-        ''}
-        ${lib.optionalString encrypted ''
-          machine.succeed("cryptsetup status cryptnix")
-          machine.succeed("lvs stateless/nix")
-        ''}
-        ${lib.optionalString ((disk.swap.size or null) != null) ''
-          assert machine.succeed("swapon --show=NAME --noheadings").strip() != "", "swap is not active"
-        ''}
-        ${lib.optionalString ((disk.swap.size or null) == null) ''
-          assert machine.succeed("swapon --show=NAME --noheadings").strip() == "", "unexpected swap"
-        ''}
+        assert machine.succeed("findmnt -n -o FSTYPE /nix").strip() == NIX_FS_TYPE
+        if NIX_FS_TYPE == "btrfs":
+            assert "compress-force=zstd" in machine.succeed("findmnt -n -o OPTIONS /nix")
+        if ENCRYPTED:
+            machine.succeed("cryptsetup status cryptnix")
+            machine.succeed("lvs stateless/nix")
+        swaps = machine.succeed("swapon --show=NAME --noheadings").strip()
+        assert (swaps != "") == HAS_SWAP, f"swap expected: {HAS_SWAP}, active: {swaps!r}"
 
     with subtest("/tmp is a bind mount of an on-disk directory outside persistence"):
         source = machine.succeed("findmnt -n -o SOURCE /tmp").strip()
