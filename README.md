@@ -34,9 +34,11 @@ The account databases (`passwd`, `group`, `shadow`, `gshadow`, `subuid`,
 1. At boot, `stateless-restore-account-files` copies them from
    `/nix/persist/etc` into `/etc` before userborn runs, so userborn merges
    the declared users into the mutable state.
-2. `stateless-persist-account-files.path` watches them and copies any change
-   back to `/nix/persist/etc` (write to a temp file, fsync, rename), and once
-   more at shutdown.
+2. `stateless-persist-account-files.path` watches `/etc` and copies any
+   changed database back to `/nix/persist/etc` (write to a temp file, fsync,
+   rename), and once more at shutdown. It watches the directory because a
+   `PathChanged=` list naming a file that does not exist yet (`gshadow`,
+   `subuid`) makes systemd miss the rename that replaces the others.
 
 They cannot be symlinks or bind mounts. shadow-utils opens them with
 `O_NOFOLLOW`, so `useradd` fails on a symlink. pam_unix writes a temp file
@@ -119,6 +121,9 @@ nix flake check -L
 ```
 
 - `eval`: assertions, defaults and generated layouts (seconds).
+- `module`: the module in a test VM without the installer: `chpasswd`,
+  `useradd`, a change right before shutdown, restore at boot (about two
+  minutes).
 - `install-plain-ext4`, `install-luks-btrfs-swap`: boot the real ISO in
   QEMU with OVMF and a blank disk, install, boot the result, then check the
   tmpfs root, `/tmp` on disk, machine-id and host key stability, console
