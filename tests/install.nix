@@ -47,6 +47,9 @@ let
         # A failed unit must fail the test, not park the VM in emergency
         # mode where the driver waits for its backdoor until the timeout.
         systemd.enableEmergencyMode = false;
+        # test-instrumentation gives root an empty password file, which would
+        # override both the installer's password and hashedPassword below.
+        users.users.root.hashedPasswordFile = lib.mkForce null;
         # A cheap KDF keeps the test fast; real installs use the default.
         disko.devices.disk.main.content.partitions = lib.mkIf encrypted {
           luks.content.extraFormatArgs = [
