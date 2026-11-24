@@ -256,7 +256,10 @@ fi
 
 if [[ $accounts_persist == true ]]; then
   log "creating account databases in $persist_path/etc"
-  USERBORN_MUTABLE_USERS=true userborn "$userborn_config" "$persist_root/etc" || die "userborn failed"
+  # A fresh disk has no previous config; userborn falls back to the current
+  # one when the file is missing, which disables nothing.
+  USERBORN_MUTABLE_USERS=true USERBORN_PREVIOUS_CONFIG="$secrets_dir/no-previous-userborn.json" \
+    userborn "$userborn_config" "$persist_root/etc" || die "userborn failed"
   if [[ ${#hashed_entries[@]} -gt 0 ]]; then
     printf '%s\n' "${hashed_entries[@]}" | chpasswd --encrypted --prefix "$persist_root" || die "setting passwords failed"
     log "set passwords for: $(printf '%s ' "${hashed_entries[@]%%:*}")"
