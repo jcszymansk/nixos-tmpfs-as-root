@@ -6,13 +6,19 @@
   # Arguments
   - `name`: test name suffix.
   - `disk`: overrides for `stateless.disk` of the target.
+  - `mutableUsers`: with false, users and passwords come from the
+    configuration (through userborn) and nothing about them is persisted.
 */
 {
   pkgs,
   lib,
   self,
 }:
-{ name, disk }:
+{
+  name,
+  disk,
+  mutableUsers ? true,
+}:
 
 let
 
@@ -21,6 +27,10 @@ let
   nixFsType = disk.nixFsType or "ext4";
   hasSwap = (disk.swap.size or null) != null;
   pyBool = b: if b then "True" else "False";
+
+  # yescrypt of "alicepw" and "rootpw", for the immutable variant.
+  aliceHash = "$y$j9T$BKr7XFqxq0jf5rnAtJIQe1$riKhHLw8HbC9NiFrufvwu8Y9TXOQFzW1uR133srib4/";
+  rootHash = "$y$j9T$25wDNvyuYKDbf8NLj2EF..$yC.yi7qVmY4b42nPXU7jYMEsET0wMiAAvkmWipxUbg2";
 
   testInstrumentation = "${pkgs.path}/nixos/modules/testing/test-instrumentation.nix";
 
@@ -44,6 +54,12 @@ let
           ];
         };
       }
+      (lib.mkIf (!mutableUsers) {
+        users.mutableUsers = lib.mkForce false;
+        services.userborn.enable = true;
+        users.users.alice.hashedPassword = aliceHash;
+        users.users.root.hashedPassword = rootHash;
+      })
     ];
   };
 
@@ -75,6 +91,7 @@ pkgs.testers.runNixOSTest {
     NIX_FS_TYPE = "${nixFsType}"
     HAS_SWAP = ${pyBool hasSwap}
     LUKS_PASSPHRASE = "${luksPassphrase}"
+    MUTABLE_USERS = ${pyBool mutableUsers}
     state = tempfile.mkdtemp()
     disk_image = os.path.join(state, "disk.qcow2")
     efi_vars = os.path.join(state, "OVMF_VARS.fd")
@@ -105,25 +122,31 @@ pkgs.testers.runNixOSTest {
         return m
 
 
-    def login(m, user: str, password: str) -> None:
-        m.send_key("alt-f2")
-        m.wait_until_succeeds("[ $(fgconsole) = 2 ]")
-        m.wait_for_unit("getty@tty2.service")
-        m.wait_until_tty_matches("2", "login: ")
+    def login(m, tty: int, user: str, password: str) -> None:
+        """Log in on a fresh tty, so prompts left on screen cannot match."""
+        m.send_key(f"alt-f{tty}")
+        m.wait_until_succeeds(f"[ $(fgconsole) = {tty} ]")
+        m.wait_for_unit(f"getty@tty{tty}.service")
+        m.wait_until_tty_matches(str(tty), "login: ")
         m.send_chars(f"{user}\n")
-        m.wait_until_tty_matches("2", "Password: ")
+        m.wait_until_tty_matches(str(tty), "Password: ")
         m.send_chars(f"{password}\n")
-        m.wait_until_succeeds(f"pgrep -u {user} -t tty2 bash")
+        m.wait_until_succeeds(f"pgrep -u {user} -t tty{tty} bash")
         m.send_chars("exit\n")
-        m.wait_until_fails(f"pgrep -u {user} -t tty2 bash")
+        m.wait_until_fails(f"pgrep -u {user} -t tty{tty} bash")
 
 
     with subtest("install from the ISO"):
         installer = create_machine(start_command(True), name="installer")
         installer.start()
         installer.wait_for_unit("multi-user.target")
-        installer.succeed("printf 'root:rootpw\\nalice:alicepw\\n' > /run/passwords")
-        install_command = "stateless-install --yes --passwords-file /run/passwords"
+        install_command = "stateless-install --yes"
+        if MUTABLE_USERS:
+            installer.succeed("printf 'root:rootpw\\nalice:alicepw\\n' > /run/passwords")
+            install_command += " --passwords-file /run/passwords"
+        else:
+            installer.succeed("printf 'alice:alicepw\\n' > /run/passwords")
+            installer.fail("stateless-install --yes --passwords-file /run/passwords")
         if ENCRYPTED:
             installer.succeed(f"printf '%s\\n' '{LUKS_PASSPHRASE}' > /run/luks")
             install_command += " --luks-passphrase-file /run/luks"
@@ -168,22 +191,30 @@ pkgs.testers.runNixOSTest {
         assert host_key.split()[1] in out, "installer printed a different host key"
         machine.succeed("test ! -e /etc/ssh/ssh_host_ed25519_key")
 
-    with subtest("passwords set by the installer work"):
-        login(machine, "alice", "alicepw")
-        login(machine, "root", "rootpw")
+    with subtest("passwords set by the installer or the configuration work"):
+        login(machine, 2, "alice", "alicepw")
+        login(machine, 3, "root", "rootpw")
 
-    with subtest("account databases are restored files, not symlinks"):
+    with subtest("account databases are plain files in /etc"):
         for f in ["passwd", "group", "shadow"]:
             machine.succeed(f"test -f /etc/{f} -a ! -L /etc/{f}")
-            machine.succeed(f"cmp /etc/{f} ${persist}/etc/{f}")
-        machine.succeed("systemctl is-active stateless-persist-account-files.path")
+            if MUTABLE_USERS:
+                machine.succeed(f"cmp /etc/{f} ${persist}/etc/{f}")
+            else:
+                machine.fail(f"test -e ${persist}/etc/{f}")
+        if MUTABLE_USERS:
+            machine.succeed("systemctl is-active stateless-persist-account-files.path")
+        else:
+            machine.fail("systemctl cat stateless-persist-account-files.path")
 
-    with subtest("imperative account changes reach the disk promptly"):
-        machine.succeed("echo 'alice:alicepw2' | chpasswd")
-        machine.succeed("useradd -m bob && echo 'bob:bobpw' | chpasswd")
-        machine.wait_until_succeeds("grep -q '^bob:' ${persist}/etc/passwd", timeout=10)
-        machine.wait_until_succeeds("cmp /etc/shadow ${persist}/etc/shadow", timeout=10)
-        machine.succeed("touch /etc/ephemeral /root/kept /tmp/kept-tmp")
+    if MUTABLE_USERS:
+        with subtest("imperative account changes reach the disk promptly"):
+            machine.succeed("echo 'alice:alicepw2' | chpasswd")
+            machine.succeed("useradd -m bob && echo 'bob:bobpw' | chpasswd")
+            machine.wait_until_succeeds("grep -q '^bob:' ${persist}/etc/passwd", timeout=10)
+            machine.wait_until_succeeds("cmp /etc/shadow ${persist}/etc/shadow", timeout=10)
+
+    machine.succeed("touch /etc/ephemeral /root/kept /tmp/kept-tmp")
 
     machine.shutdown()
 
@@ -194,12 +225,15 @@ pkgs.testers.runNixOSTest {
         machine.fail("test -e /etc/ephemeral")
         machine.succeed("test -e /root/kept")
         machine.succeed("test -e /tmp/kept-tmp")
-        machine.succeed("getent passwd bob")
-        machine.succeed("test -d /home/bob")
-        login(machine, "alice", "alicepw2")
-        login(machine, "bob", "bobpw")
         machine.succeed("test -f /etc/shadow -a ! -L /etc/shadow")
-        machine.fail("journalctl -b -u stateless-restore-account-files -u stateless-persist-account-files | grep -E 'refusing|failed'")
+        if MUTABLE_USERS:
+            machine.succeed("getent passwd bob")
+            machine.succeed("test -d /home/bob")
+            login(machine, 2, "alice", "alicepw2")
+            login(machine, 3, "bob", "bobpw")
+            machine.fail("journalctl -b -u stateless-restore-account-files -u stateless-persist-account-files | grep -E 'refusing|failed'")
+        else:
+            login(machine, 2, "alice", "alicepw")
 
     machine.shutdown()
   '';

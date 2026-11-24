@@ -101,6 +101,11 @@
               encryption.enable = true;
             };
           };
+          install-immutable-users = installTest {
+            name = "immutable-users";
+            disk = { };
+            mutableUsers = false;
+          };
           eval = import ./tests/eval.nix { inherit pkgs lib self; };
           format = pkgs.runCommand "check-format" { nativeBuildInputs = [ pkgs.nixfmt ]; } ''
             find ${self} -name '*.nix' -exec nixfmt --check {} +
