@@ -26,6 +26,9 @@ fi
 install -d -m 0755 "$dst_dir"
 
 status=0
+copied=()
+unchanged=()
+absent=()
 for name in "${account_files[@]}"; do
   src="$src_dir/$name"
   dst="$dst_dir/$name"
@@ -36,7 +39,7 @@ for name in "${account_files[@]}"; do
     continue
   fi
   if [[ ! -e $src ]]; then
-    log "skipping $name: not present in $src_dir"
+    absent+=("$name")
     continue
   fi
   if [[ ! -f $src || ! -s $src ]]; then
@@ -45,14 +48,14 @@ for name in "${account_files[@]}"; do
     continue
   fi
   if [[ -f $dst ]] && cmp -s "$src" "$dst"; then
-    log "$name unchanged"
+    unchanged+=("$name")
     continue
   fi
 
   tmp="$dst_dir/.$name.stateless-tmp"
   rm -f "$tmp"
   if cp --preserve=mode,ownership,timestamps "$src" "$tmp" && sync "$tmp" && mv -f "$tmp" "$dst"; then
-    log "copied $src -> $dst"
+    copied+=("$name")
   else
     log "failed to copy $src -> $dst"
     rm -f "$tmp"
@@ -61,4 +64,5 @@ for name in "${account_files[@]}"; do
 done
 
 sync "$dst_dir"
+log "$src_dir -> $dst_dir: copied [${copied[*]}] unchanged [${unchanged[*]}] absent [${absent[*]}]"
 exit "$status"

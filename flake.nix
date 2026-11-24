@@ -106,6 +106,7 @@
             disk = { };
             mutableUsers = false;
           };
+          module = import ./tests/module.nix { inherit pkgs self; };
           eval = import ./tests/eval.nix { inherit pkgs lib self; };
           format = pkgs.runCommand "check-format" { nativeBuildInputs = [ pkgs.nixfmt ]; } ''
             find ${self} -name '*.nix' -exec nixfmt --check {} +

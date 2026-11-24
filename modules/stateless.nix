@@ -11,7 +11,7 @@
    /nix/persist/etc/machine-id ──bind───▶ /etc/machine-id
    /nix/persist/etc/{passwd,shadow,..}
           │  ▲
-          │  └── stateless-persist-account-files (path unit, on change)
+          │  └── stateless-persist-account-files (path unit on /etc)
           └───── stateless-restore-account-files (boot, before userborn) ─▶ /etc
    /nix/tmp ──────────bind──────────────▶ /tmp
    (tmpfs) ─────────────────────────────▶ / , /etc, ...
@@ -245,10 +245,15 @@ in
           };
         };
 
+        # Watches the directory, not the files: passwd and useradd rename a
+        # new file into /etc, and a PathChanged= list that names a file
+        # which does not exist yet (gshadow, subuid) makes systemd miss
+        # those renames for the files that do. The copy compares first, so
+        # unrelated /etc changes cost a few cmp calls.
         systemd.paths.stateless-persist-account-files = {
-          description = "Watch account databases in /etc";
+          description = "Watch /etc for account database changes";
           wantedBy = [ "paths.target" ];
-          pathConfig.PathChanged = map (f: "/etc/${f}") accountFiles;
+          pathConfig.PathChanged = "/etc";
         };
 
         systemd.services.stateless-persist-account-files = {
