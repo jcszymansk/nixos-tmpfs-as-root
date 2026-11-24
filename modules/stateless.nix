@@ -141,7 +141,7 @@ in
             message = "stateless: fileSystems.\"/\" must be a tmpfs.";
           }
           {
-            assertion = rootFs != null && lib.elem "mode=755" rootFs.options;
+            assertion = rootFs == null || rootFs.fsType != "tmpfs" || lib.elem "mode=755" rootFs.options;
             message = ''
               stateless: fileSystems."/" needs the "mode=755" option. The tmpfs
               default is 1777, which makes OpenSSH refuse logins.

@@ -14,7 +14,7 @@
     enable = true;
     disk = {
       device = "/dev/vda";
-      nixFsType = "ext4";
+      # nixFsType = "btrfs";
       # encryption.enable = true;
       # swap.size = "8G";
     };

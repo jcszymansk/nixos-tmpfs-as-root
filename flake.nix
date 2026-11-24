@@ -100,7 +100,7 @@
               encryption.enable = true;
             };
           };
-          eval = import ./tests/eval.nix { inherit pkgs self; };
+          eval = import ./tests/eval.nix { inherit pkgs lib self; };
           format = pkgs.runCommand "check-format" { nativeBuildInputs = [ pkgs.nixfmt ]; } ''
             nixfmt --check ${lib.concatStringsSep " " (map (f: "${self}/${f}") [ "flake.nix" "modules" "examples" "tests" ])}
             touch $out
