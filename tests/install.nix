@@ -44,6 +44,9 @@ let
         # The last console= becomes /dev/console. test-instrumentation ends
         # with tty0, which would hide initrd output and the LUKS prompt.
         boot.kernelParams = lib.mkAfter [ "console=ttyS0" ];
+        # A failed unit must fail the test, not park the VM in emergency
+        # mode where the driver waits for its backdoor until the timeout.
+        systemd.enableEmergencyMode = false;
         # A cheap KDF keeps the test fast; real installs use the default.
         disko.devices.disk.main.content.partitions = lib.mkIf encrypted {
           luks.content.extraFormatArgs = [
@@ -119,6 +122,8 @@ pkgs.testers.runNixOSTest {
             m.wait_for_console_text("Please enter passphrase")
             m.send_console(f"{LUKS_PASSPHRASE}\n")
         m.wait_for_unit("multi-user.target")
+        failed = m.succeed("systemctl --failed --no-legend --plain").strip()
+        assert failed == "", f"failed units:\n{failed}"
         return m
 
 
