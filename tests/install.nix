@@ -31,6 +31,9 @@ let
       testInstrumentation
       {
         stateless.disk = disk;
+        # The last console= becomes /dev/console. test-instrumentation ends
+        # with tty0, which would hide initrd output and the LUKS prompt.
+        boot.kernelParams = lib.mkAfter [ "console=ttyS0" ];
         # A cheap KDF keeps the test fast; real installs use the default.
         disko.devices.disk.main.content.partitions = lib.mkIf encrypted {
           luks.content.extraFormatArgs = [
