@@ -125,6 +125,9 @@ nix flake check -L
   logins with the installer's passwords, `chpasswd`/`useradd` surviving a
   reboot, and files outside persistence disappearing. Needs KVM, takes
   several minutes each.
+- `install-immutable-users`: the same with `mutableUsers = false`;
+  passwords come from the configuration and nothing about accounts is
+  persisted.
 - `format`: `nixfmt --check`; `nix fmt` fixes it.
 
 Only x86_64 is tested. `mkInstaller` builds an ISO for the target's
