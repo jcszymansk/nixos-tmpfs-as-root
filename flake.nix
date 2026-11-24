@@ -79,7 +79,8 @@
       };
 
       packages.${testedSystem} = {
-        example-iso = (self.lib.mkInstaller { target = self.nixosConfigurations.example; }).config.system.build.isoImage;
+        example-iso =
+          (self.lib.mkInstaller { target = self.nixosConfigurations.example; }).config.system.build.isoImage;
         default = self.packages.${testedSystem}.example-iso;
       };
 
@@ -102,7 +103,7 @@
           };
           eval = import ./tests/eval.nix { inherit pkgs lib self; };
           format = pkgs.runCommand "check-format" { nativeBuildInputs = [ pkgs.nixfmt ]; } ''
-            nixfmt --check ${lib.concatStringsSep " " (map (f: "${self}/${f}") [ "flake.nix" "modules" "examples" "tests" ])}
+            find ${self} -name '*.nix' -exec nixfmt --check {} +
             touch $out
           '';
         };

@@ -72,7 +72,9 @@ let
       isPrefix = mp: mp == "/" || path == mp || lib.hasPrefix "${mp}/" path;
       candidates = lib.filter isPrefix (lib.attrNames config.fileSystems);
     in
-    lib.foldl' (best: mp: if lib.stringLength mp > lib.stringLength best then mp else best) "/" candidates;
+    lib.foldl' (
+      best: mp: if lib.stringLength mp > lib.stringLength best then mp else best
+    ) "/" candidates;
 
   rootFs = config.fileSystems."/" or null;
 in
@@ -210,7 +212,8 @@ in
       (lib.mkIf cfg.accounts.persist {
         assertions = [
           {
-            assertion = config.services.userborn.enable && config.services.userborn.passwordFilesLocation == "/etc";
+            assertion =
+              config.services.userborn.enable && config.services.userborn.passwordFilesLocation == "/etc";
             message = ''
               stateless.accounts.persist requires services.userborn with
               passwordFilesLocation = "/etc"; the restore unit is ordered

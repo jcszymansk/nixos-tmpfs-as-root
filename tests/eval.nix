@@ -62,15 +62,18 @@ let
     root-is-mode-755-tmpfs =
       cfg.fileSystems."/".fsType == "tmpfs" && lib.elem "mode=755" cfg.fileSystems."/".options;
 
-    root-size-is-passed-to-tmpfs = lib.elem "size=25%" (mkSystem {
-      stateless.disk.rootSize = "25%";
-    }).config.fileSystems."/".options;
+    root-size-is-passed-to-tmpfs =
+      lib.elem "size=25%"
+        (mkSystem {
+          stateless.disk.rootSize = "25%";
+        }).config.fileSystems."/".options;
 
     tmp-is-bind-mount-of-nix-tmp =
       cfg.fileSystems."/tmp".device == "/nix/tmp" && lib.elem "bind" cfg.fileSystems."/tmp".options;
 
     tmp-path-is-configurable =
-      (mkSystem { stateless.tmp.path = "/nix/scratch"; }).config.fileSystems."/tmp".device == "/nix/scratch";
+      (mkSystem { stateless.tmp.path = "/nix/scratch"; }).config.fileSystems."/tmp".device
+      == "/nix/scratch";
 
     machine-id-is-persisted = lib.elem "/etc/machine-id" (
       map (f: f.filePath) cfg.environment.persistence."/nix/persist".files
@@ -84,13 +87,17 @@ let
         "/var"
       ];
 
-    networkmanager-connections-are-persisted-with-networkmanager = lib.elem "/etc/NetworkManager/system-connections" (
-      map (d: d.dirPath)
-        (mkSystem { networking.networkmanager.enable = true; })
-        .config.environment.persistence."/nix/persist".directories
-    );
+    networkmanager-connections-are-persisted-with-networkmanager =
+      lib.elem "/etc/NetworkManager/system-connections"
+        (
+          map (d: d.dirPath)
+            (mkSystem { networking.networkmanager.enable = true; })
+            .config.environment.persistence."/nix/persist".directories
+        );
 
-    ssh-host-keys-live-in-persistence = lib.all (k: lib.hasPrefix "/nix/persist/etc/ssh/" k.path) cfg.services.openssh.hostKeys;
+    ssh-host-keys-live-in-persistence = lib.all (
+      k: lib.hasPrefix "/nix/persist/etc/ssh/" k.path
+    ) cfg.services.openssh.hostKeys;
 
     mutable-users-enable-account-persistence =
       cfg.stateless.accounts.persist
@@ -124,7 +131,7 @@ let
     swap-partition-only-when-requested =
       !(cfg.disko.devices.disk.main.content.partitions ? swap)
       && (mkSystem { stateless.disk.swap.size = "1G"; }).config.disko.devices.disk.main.content.partitions
-      ? swap;
+        ? swap;
 
     hibernation-needs-swap = failsWith "hibernation needs" (mkSystem {
       stateless.disk.swap.hibernation = true;
@@ -164,7 +171,9 @@ let
       stateless.tmp.path = "/nix/persist/tmp";
     });
 
-    tmp-on-tmpfs-is-rejected = failsWith "boot.tmp.useTmpfs" (mkSystem { boot.tmp.useTmpfs = true; });
+    tmp-on-tmpfs-is-rejected = failsWith "boot.tmp.useTmpfs" (mkSystem {
+      boot.tmp.useTmpfs = true;
+    });
 
     account-persistence-needs-userborn-in-etc = failsWith "requires services.userborn" (mkSystem {
       services.userborn.passwordFilesLocation = "/var/lib/nixos";
@@ -176,11 +185,13 @@ let
         "alice"
       ];
 
-    installer-asks-nobody-for-immutable-users = (installerFor immutable).stateless.installer.passwordUsers == [ ];
+    installer-asks-nobody-for-immutable-users =
+      (installerFor immutable).stateless.installer.passwordUsers == [ ];
 
     installer-follows-target-architecture =
-      (installerFor (mkSystem { nixpkgs.hostPlatform = lib.mkForce "aarch64-linux"; }))
-      .nixpkgs.hostPlatform.system == "aarch64-linux";
+      (installerFor (mkSystem {
+        nixpkgs.hostPlatform = lib.mkForce "aarch64-linux";
+      })).nixpkgs.hostPlatform.system == "aarch64-linux";
 
     installer-rejects-foreign-architecture = failsWith "must share an architecture" (
       self.lib.mkInstaller {

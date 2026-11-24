@@ -80,8 +80,7 @@ in
       type = lib.types.listOf lib.types.str;
       default =
         if target.stateless.accounts.persist then
-          [ "root" ]
-          ++ lib.attrNames (lib.filterAttrs (_: u: u.enable && u.isNormalUser) target.users.users)
+          [ "root" ] ++ lib.attrNames (lib.filterAttrs (_: u: u.enable && u.isNormalUser) target.users.users)
         else
           [ ];
       defaultText = lib.literalExpression ''

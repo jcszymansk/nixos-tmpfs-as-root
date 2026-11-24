@@ -7,7 +7,11 @@
   - `name`: test name suffix.
   - `disk`: overrides for `stateless.disk` of the target.
 */
-{ pkgs, lib, self }:
+{
+  pkgs,
+  lib,
+  self,
+}:
 { name, disk }:
 
 let
