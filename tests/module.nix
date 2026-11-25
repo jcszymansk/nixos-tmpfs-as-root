@@ -62,6 +62,9 @@ pkgs.testers.runNixOSTest {
       # would re-apply on every boot.
       users.users.root.hashedPasswordFile = lib.mkForce null;
       systemd.enableEmergencyMode = false;
+      # Without KVM, udev can take longer than test-instrumentation's 300 s
+      # to create the serial device the test backdoor waits for.
+      systemd.settings.Manager.DefaultDeviceTimeoutSec = lib.mkForce "15min";
     };
 
   testScript = ''
