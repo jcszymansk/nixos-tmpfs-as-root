@@ -136,7 +136,12 @@ nix flake check -L
   persisted.
 - `format`: `nixfmt --check`; `nix fmt` fixes it.
 
-Only x86_64 is tested. `mkInstaller` builds an ISO for the target's
-architecture, so an aarch64 target needs an aarch64 builder (or binfmt).
+Checks exist for `x86_64-linux` and `aarch64-linux`. Every check passes on
+x86_64 with KVM. On aarch64 (a VM without KVM, so the module test ran
+emulated in about 17 minutes) `eval`, `format` and `module` pass and the
+example system and installer ISO build; the install tests have not run
+there yet, they need an aarch64 machine with KVM to finish in reasonable
+time. `mkInstaller` builds an ISO for the target's architecture, so an
+aarch64 target needs an aarch64 builder (or binfmt).
 
 [lantian]: https://lantian.pub/en/article/modify-computer/nixos-impermanence.lantian/
