@@ -11,7 +11,7 @@
    /nix/persist/etc/machine-id ──bind───▶ /etc/machine-id
    /nix/persist/etc/{passwd,shadow,..}
           │  ▲
-          │  └── stateless-persist-account-files (path unit on /etc)
+          │  └── stateless-persist-account-files (inotify watch on /etc)
           └───── stateless-restore-account-files (boot, before userborn) ─▶ /etc
    /nix/tmp ──────────bind──────────────▶ /tmp
    (tmpfs) ─────────────────────────────▶ / , /etc, ...
@@ -56,6 +56,19 @@ let
   };
 
   copyAccountFilesExe = lib.getExe copyAccountFiles;
+
+  watchAccountFiles = pkgs.writeShellApplication {
+    name = "stateless-watch-account-files";
+    runtimeInputs = [ pkgs.inotify-tools ];
+    text = ''
+      ${lib.toShellVars {
+        account_files = accountFiles;
+        persist_etc = persistEtc;
+        copy_account_files = copyAccountFilesExe;
+      }}
+      ${builtins.readFile ../scripts/watch-account-files.sh}
+    '';
+  };
 
   /**
     Longest `fileSystems` mount point that is a prefix of `path`.
@@ -245,40 +258,18 @@ in
           };
         };
 
-        # Watches the directory, not the files: passwd and useradd rename a
-        # new file into /etc, and a PathChanged= list that names a file
-        # which does not exist yet (gshadow, subuid) makes systemd miss
-        # those renames for the files that do. The copy compares first, so
-        # unrelated /etc changes cost a few cmp calls.
-        systemd.paths.stateless-persist-account-files = {
-          description = "Watch /etc for account database changes";
-          wantedBy = [ "paths.target" ];
-          pathConfig.PathChanged = "/etc";
-        };
-
         systemd.services.stateless-persist-account-files = {
-          description = "Copy account databases to ${persistEtc}";
+          description = "Keep ${persistEtc} in sync with the account databases in /etc";
           wantedBy = [ "multi-user.target" ];
           after = [ "userborn.service" ];
           unitConfig.RequiresMountsFor = [ persistEtc ];
           serviceConfig = {
-            Type = "oneshot";
-            ExecStart = "${copyAccountFilesExe} /etc ${persistEtc}";
-          };
-        };
-
-        # Closes the gap between a last-second change and the path unit
-        # firing: stopping happens before /nix is unmounted.
-        systemd.services.stateless-persist-account-files-on-shutdown = {
-          description = "Copy account databases to ${persistEtc} at shutdown";
-          wantedBy = [ "multi-user.target" ];
-          after = [ "userborn.service" ];
-          unitConfig.RequiresMountsFor = [ persistEtc ];
-          serviceConfig = {
-            Type = "oneshot";
-            RemainAfterExit = true;
-            ExecStart = "${pkgs.coreutils}/bin/true";
-            ExecStop = "${copyAccountFilesExe} /etc ${persistEtc}";
+            ExecStart = lib.getExe watchAccountFiles;
+            # Runs before /nix is unmounted (RequiresMountsFor orders the
+            # stop), catching a change in the last moments before shutdown.
+            ExecStopPost = "${copyAccountFilesExe} /etc ${persistEtc}";
+            Restart = "always";
+            RestartSec = 1;
           };
         };
       })

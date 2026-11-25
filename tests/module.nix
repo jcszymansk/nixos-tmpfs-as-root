@@ -81,7 +81,7 @@ pkgs.testers.runNixOSTest {
     with subtest("first boot persists the generated databases"):
         machine.wait_until_succeeds("cmp /etc/passwd /persist/etc/passwd", timeout=30)
         machine.succeed("cmp /etc/shadow /persist/etc/shadow")
-        machine.succeed("systemctl is-active stateless-persist-account-files.path")
+        machine.succeed("systemctl is-active stateless-persist-account-files.service")
 
     with subtest("chpasswd reaches the disk"):
         before = persisted("shadow")
@@ -93,6 +93,14 @@ pkgs.testers.runNixOSTest {
         machine.succeed("useradd -m bob && echo 'bob:bobpw' | chpasswd")
         machine.wait_until_succeeds("grep -q '^bob:' /persist/etc/passwd", timeout=10)
         machine.wait_until_succeeds("grep -q '^bob:' /persist/etc/shadow", timeout=10)
+
+    with subtest("a burst of changes is not partly lost"):
+        machine.succeed(
+            "for i in $(seq 1 20); do useradd u$i && echo u$i:pw$i | chpasswd; done"
+        )
+        machine.wait_until_succeeds("cmp /etc/shadow /persist/etc/shadow", timeout=10)
+        machine.succeed("cmp /etc/passwd /persist/etc/passwd")
+        machine.succeed("grep -q '^u20:' /persist/etc/shadow")
 
     with subtest("a change right before shutdown is not lost"):
         machine.succeed("useradd carol")

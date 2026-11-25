@@ -216,9 +216,9 @@ pkgs.testers.runNixOSTest {
             else:
                 machine.fail(f"test -e ${persist}/etc/{f}")
         if MUTABLE_USERS:
-            machine.succeed("systemctl is-active stateless-persist-account-files.path")
+            machine.succeed("systemctl is-active stateless-persist-account-files.service")
         else:
-            machine.fail("systemctl cat stateless-persist-account-files.path")
+            machine.fail("systemctl cat stateless-persist-account-files.service")
 
     if MUTABLE_USERS:
         with subtest("imperative account changes reach the disk promptly"):

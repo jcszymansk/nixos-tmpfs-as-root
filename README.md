@@ -34,11 +34,12 @@ The account databases (`passwd`, `group`, `shadow`, `gshadow`, `subuid`,
 1. At boot, `stateless-restore-account-files` copies them from
    `/nix/persist/etc` into `/etc` before userborn runs, so userborn merges
    the declared users into the mutable state.
-2. `stateless-persist-account-files.path` watches `/etc` and copies any
-   changed database back to `/nix/persist/etc` (write to a temp file, fsync,
-   rename), and once more at shutdown. It watches the directory because a
-   `PathChanged=` list naming a file that does not exist yet (`gshadow`,
-   `subuid`) makes systemd miss the rename that replaces the others.
+2. `stateless-persist-account-files` keeps an inotify watch on `/etc` and
+   copies any changed database back to `/nix/persist/etc` (write to a temp
+   file, fsync, rename), and once more when it stops at shutdown. A
+   long-running watcher rather than a systemd path unit: a path unit drops
+   a change that arrives while its service is still copying the previous
+   one, which `useradd && chpasswd` hits easily.
 
 They cannot be symlinks or bind mounts. shadow-utils opens them with
 `O_NOFOLLOW`, so `useradd` fails on a symlink. pam_unix writes a temp file
