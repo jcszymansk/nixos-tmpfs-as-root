@@ -56,7 +56,7 @@ from the configuration (for example `hashedPasswordFile` pointing into
 In your flake:
 
 ```nix
-inputs.stateless.url = "github:jacekszymanski/nixos-tmpfs-as-root";
+inputs.stateless.url = "github:jcszymansk/nixos-tmpfs-as-root";
 
 nixosConfigurations.myhost = nixpkgs.lib.nixosSystem {
   modules = [
