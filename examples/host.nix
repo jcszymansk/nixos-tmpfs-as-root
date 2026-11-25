@@ -3,7 +3,6 @@
 {
   imports = [ (modulesPath + "/profiles/qemu-guest.nix") ];
 
-  nixpkgs.hostPlatform = "x86_64-linux";
   networking.hostName = "example";
   system.stateVersion = "26.05";
 

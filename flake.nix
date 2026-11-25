@@ -23,8 +23,27 @@
     let
       inherit (nixpkgs) lib;
 
-      testedSystem = "x86_64-linux";
-      pkgs = nixpkgs.legacyPackages.${testedSystem};
+      systems = [
+        "x86_64-linux"
+        "aarch64-linux"
+      ];
+      forAllSystems = f: lib.genAttrs systems (system: f system nixpkgs.legacyPackages.${system});
+
+      /**
+        The example host for one architecture.
+
+        # Arguments
+        - `system`: the target platform, e.g. "aarch64-linux".
+      */
+      mkExample =
+        system:
+        lib.nixosSystem {
+          modules = [
+            self.nixosModules.default
+            ./examples/host.nix
+            { nixpkgs.hostPlatform = system; }
+          ];
+        };
     in
     {
       nixosModules = {
@@ -71,20 +90,21 @@
           };
       };
 
-      nixosConfigurations.example = lib.nixosSystem {
-        modules = [
-          self.nixosModules.default
-          ./examples/host.nix
-        ];
+      nixosConfigurations = {
+        example = mkExample "x86_64-linux";
+        example-aarch64 = mkExample "aarch64-linux";
       };
 
-      packages.${testedSystem} = {
-        example-iso =
-          (self.lib.mkInstaller { target = self.nixosConfigurations.example; }).config.system.build.isoImage;
-        default = self.packages.${testedSystem}.example-iso;
-      };
+      packages = forAllSystems (
+        system: _: rec {
+          example = (mkExample system).config.system.build.toplevel;
+          example-iso = (self.lib.mkInstaller { target = mkExample system; }).config.system.build.isoImage;
+          default = example-iso;
+        }
+      );
 
-      checks.${testedSystem} =
+      checks = forAllSystems (
+        system: pkgs:
         let
           installTest = import ./tests/install.nix { inherit pkgs lib self; };
         in
@@ -107,13 +127,17 @@
             mutableUsers = false;
           };
           module = import ./tests/module.nix { inherit pkgs self; };
-          eval = import ./tests/eval.nix { inherit pkgs lib self; };
+          eval = import ./tests/eval.nix {
+            inherit pkgs lib self;
+            example = mkExample system;
+          };
           format = pkgs.runCommand "check-format" { nativeBuildInputs = [ pkgs.nixfmt ]; } ''
             find ${self} -name '*.nix' -exec nixfmt --check {} +
             touch $out
           '';
-        };
+        }
+      );
 
-      formatter.${testedSystem} = pkgs.nixfmt-tree;
+      formatter = forAllSystems (_: pkgs: pkgs.nixfmt-tree);
     };
 }

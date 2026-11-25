@@ -33,6 +33,8 @@ let
   rootHash = "$y$j9T$25wDNvyuYKDbf8NLj2EF..$yC.yi7qVmY4b42nPXU7jYMEsET0wMiAAvkmWipxUbg2";
 
   testInstrumentation = "${pkgs.path}/nixos/modules/testing/test-instrumentation.nix";
+  qemuCommon = import "${pkgs.path}/nixos/lib/qemu-common.nix" { inherit (pkgs) lib stdenv; };
+  serial = qemuCommon.qemuSerialDevice;
 
   target = lib.nixosSystem {
     modules = [
@@ -40,10 +42,11 @@ let
       ../examples/host.nix
       testInstrumentation
       {
+        nixpkgs.hostPlatform = pkgs.stdenv.hostPlatform.system;
         stateless.disk = disk;
         # The last console= becomes /dev/console. test-instrumentation ends
         # with tty0, which would hide initrd output and the LUKS prompt.
-        boot.kernelParams = lib.mkAfter [ "console=ttyS0" ];
+        boot.kernelParams = lib.mkAfter [ "console=${serial}" ];
         # A failed unit must fail the test, not park the VM in emergency
         # mode where the driver waits for its backdoor until the timeout.
         systemd.enableEmergencyMode = false;
@@ -81,7 +84,7 @@ let
   iso = installer.config.system.build.isoImage;
   isoPath = "${iso}/iso/${iso.isoName}";
   persist = target.config.stateless.persistPath;
-  qemu = "${pkgs.qemu_test}/bin/qemu-system-x86_64";
+  qemu = qemuCommon.qemuBinary pkgs.qemu_test;
 in
 pkgs.testers.runNixOSTest {
   name = "stateless-install-${name}";
@@ -113,8 +116,10 @@ pkgs.testers.runNixOSTest {
             "-drive", "if=pflash,format=raw,unit=0,readonly=on,file=${pkgs.OVMF.firmware}",
             "-drive", f"if=pflash,format=raw,unit=1,file={efi_vars}",
         ]
+        # A read-only virtio disk rather than -cdrom: aarch64's virt machine
+        # has no IDE controller. Listed after the target, so that stays vda.
         if with_iso:
-            flags += ["-cdrom", "${isoPath}"]
+            flags += ["-drive", "file=${isoPath},if=virtio,format=raw,readonly=on"]
         return " ".join(flags)
 
 

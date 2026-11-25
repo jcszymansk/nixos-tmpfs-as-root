@@ -9,18 +9,11 @@
   pkgs,
   lib,
   self,
+  example,
 }:
 
 let
-  mkSystem =
-    extra:
-    lib.nixosSystem {
-      modules = [
-        self.nixosModules.default
-        ../examples/host.nix
-        extra
-      ];
-    };
+  mkSystem = extra: example.extendModules { modules = [ extra ]; };
 
   failedAssertions =
     system: map (a: a.message) (lib.filter (a: !a.assertion) system.config.assertions);
@@ -36,8 +29,10 @@ let
     in
     failed != [ ] && lib.all (m: lib.hasInfix pattern m) failed;
 
-  example = mkSystem { };
   cfg = example.config;
+
+  thisSystem = cfg.nixpkgs.hostPlatform.system;
+  otherSystem = if thisSystem == "x86_64-linux" then "aarch64-linux" else "x86_64-linux";
 
   noDisko = extra: mkSystem ({ stateless.disk.enable = false; } // extra);
 
@@ -190,13 +185,13 @@ let
 
     installer-follows-target-architecture =
       (installerFor (mkSystem {
-        nixpkgs.hostPlatform = lib.mkForce "aarch64-linux";
-      })).nixpkgs.hostPlatform.system == "aarch64-linux";
+        nixpkgs.hostPlatform = lib.mkForce otherSystem;
+      })).nixpkgs.hostPlatform.system == otherSystem;
 
     installer-rejects-foreign-architecture = failsWith "must share an architecture" (
       self.lib.mkInstaller {
-        target = mkSystem { nixpkgs.hostPlatform = lib.mkForce "aarch64-linux"; };
-        modules = [ { nixpkgs.hostPlatform = lib.mkForce "x86_64-linux"; } ];
+        target = mkSystem { nixpkgs.hostPlatform = lib.mkForce otherSystem; };
+        modules = [ { nixpkgs.hostPlatform = lib.mkForce thisSystem; } ];
       }
     );
 
