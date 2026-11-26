@@ -88,7 +88,7 @@ pkgs.testers.runNixOSTest {
             assert "machine-id: " in out
             # The partition itself: udev may not have made the by-label links yet.
             assert "card filesystem: /dev/vdb2" in out
-            writer.succeed("mount /dev/vdb2 /mnt")
+            writer.succeed("mkdir -p /mnt && mount /dev/vdb2 /mnt")
             assert writer.succeed("stat -c %a /mnt/persist/etc/wpa_supplicant/networks.conf").strip() == "600"
             writer.succeed("grep -q 'ssid=\"TestNet\"' /mnt/persist/etc/wpa_supplicant/networks.conf")
             writer.fail("grep -r -F '${passphrase}' /mnt/persist")
