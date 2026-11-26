@@ -98,6 +98,60 @@ and run `sudo stateless-install`. The installer:
 It prints the machine-id and host key fingerprints at the end. See
 `stateless-install --help` for the non-interactive flags.
 
+## SD card images (Raspberry Pi 3)
+
+Boards that boot from an SD card get a ready-to-write image instead of an
+installer. The image uses an MBR partition table, which the Pi 3 needs (it
+cannot boot from GPT):
+
+```
+MBR
+├─ 1  FAT32 FIRMWARE   GPU firmware, config.txt, U-Boot, device trees
+└─ 2  ext4  NIX        bootable; mounted at /nix, grown to the card on first boot
+       ├─ store/  boot/extlinux/  persist/  tmp/
+tmpfs (mode=755, 256M by default) on /
+```
+
+```nix
+nixosConfigurations.printer = nixpkgs.lib.nixosSystem {
+  modules = [
+    inputs.stateless.nixosModules.sdImage
+    inputs.stateless.nixosModules.raspberryPi3
+    {
+      networking.hostName = "printer";
+      stateless.sdImage.wifi.enable = true;
+      # ...
+    }
+  ];
+};
+
+packages.x86_64-linux.printer-flasher = inputs.stateless.lib.mkSdFlasher {
+  pkgs = nixpkgs.legacyPackages.x86_64-linux;
+  target = self.nixosConfigurations.printer;
+};
+```
+
+Build the image on an aarch64 machine (or through one with
+`--store ssh-ng://host --eval-store auto`), then write it:
+
+```sh
+nix build .#nixosConfigurations.printer.config.system.build.sdImage
+sudo nix run .#printer-flasher -- --wifi-ssid MyNet result/sd-image/*.img.zst /dev/sdX
+```
+
+The flasher asks you to retype the device path, writes the image, and
+then writes what must differ per card into persistence: a new
+machine-id, SSH host keys (fingerprints printed; `--ssh-host-keys DIR`
+reuses existing ones) and the Wi-Fi networks. For Wi-Fi it stores only
+the key `wpa_passphrase` derives, never the passphrase, in a root-only
+file; at boot a copy readable by the `wpa_supplicant` group goes to
+`/run`. None of this is in the image or the Nix store.
+
+The board module ships only the Pi 3's own firmware; the generic aarch64
+SD image carries about 800 MiB of firmware for other hardware. With logs
+kept in RAM or shipped elsewhere, a 16 GB card leaves room for several
+system generations.
+
 ## Options
 
 | Option | Default | |
@@ -131,6 +185,12 @@ nix flake check -L
   logins with the installer's passwords, `chpasswd`/`useradd` surviving a
   reboot, and files outside persistence disappearing. Needs KVM, takes
   several minutes each.
+- `sd-image` (aarch64 only): a writer VM runs the real flasher onto a
+  blank virtual card, and the card boots through U-Boot on QEMU's `virt`
+  machine. Checks the tmpfs root, `/nix` grown to the card, store
+  registration, the seeded identity, the Wi-Fi file and its permissions,
+  and persistence across a reboot. The Pi 3 firmware partition is only
+  exercised on real hardware.
 - `install-immutable-users`: the same with `mutableUsers = false`;
   passwords come from the configuration and nothing about accounts is
   persisted.
