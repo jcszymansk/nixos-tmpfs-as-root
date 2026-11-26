@@ -63,6 +63,7 @@ let
         openssh_enabled = lib.boolToString target.services.openssh.enable;
         host_key_specs = hostKeySpecs;
       }}
+      ${builtins.readFile ../scripts/seed-identity.sh}
       ${builtins.readFile ../scripts/stateless-install.sh}
     '';
   };

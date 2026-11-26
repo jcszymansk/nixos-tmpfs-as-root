@@ -223,36 +223,8 @@ mountpoint -q "$mount_root/nix" || die "disko did not mount $mount_root/nix"
 # --------------------------------------------------- 4. seed persistent dir
 
 persist_root="$mount_root$persist_path"
-install -d -m 0755 "$persist_root" "$persist_root/etc"
 install -d -m 1777 "$mount_root$tmp_path"
-
-systemd-id128 new >"$persist_root/etc/machine-id"
-chmod 0444 "$persist_root/etc/machine-id"
-log "machine-id: $(cat "$persist_root/etc/machine-id")"
-
-host_key_fingerprints=()
-if [[ $openssh_enabled == true ]]; then
-  for spec in "${host_key_specs[@]}"; do
-    IFS=: read -r key_type key_bits key_path <<<"$spec"
-    dest="$mount_root$key_path"
-    install -d -m 0755 "$(dirname "$dest")"
-    reused="$host_keys_source/$(basename "$key_path")"
-    if [[ -n $host_keys_source && -f $reused ]]; then
-      install -m 0600 "$reused" "$dest"
-      ssh-keygen -y -f "$dest" >"$dest.pub" || die "$reused is not a valid private key"
-      chmod 0644 "$dest.pub"
-      log "reused $key_type host key from $reused"
-    else
-      bits_args=()
-      if [[ -n $key_bits ]]; then
-        bits_args=(-b "$key_bits")
-      fi
-      ssh-keygen -q -t "$key_type" "${bits_args[@]}" -N "" -C "root@$host_name" -f "$dest" || die "generating the $key_type host key failed"
-      log "generated $key_type host key"
-    fi
-    host_key_fingerprints+=("$(ssh-keygen -l -f "$dest.pub")") || die "cannot fingerprint $dest.pub"
-  done
-fi
+seed_identity "$mount_root" ""
 
 # nixos-install activates the system in a chroot that needs users and groups
 # to chown with; with userborn nothing creates them there. When accounts
