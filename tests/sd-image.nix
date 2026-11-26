@@ -34,6 +34,16 @@ let
     ];
   };
 
+  # QEMU's U-Boot leaves 60 MB between kernel_addr_r and ramdisk_addr_r,
+  # less than the ~63 MB NixOS kernel, and refuses with "RD image overlaps
+  # OS image". The Pi 3's U-Boot leaves 86 MB, so this is a test-only fix.
+  uboot = pkgs.ubootQemuAarch64.override {
+    extraConfig = ''
+      CONFIG_USE_PREBOOT=y
+      CONFIG_PREBOOT="setenv ramdisk_addr_r 0x48000000"
+    '';
+  };
+
   image = target.config.system.build.sdImage;
   imageFile = "${image}/sd-image/${target.config.image.fileName}";
   flasher = self.lib.mkSdFlasher { inherit pkgs target; };
@@ -61,7 +71,7 @@ pkgs.testers.runNixOSTest {
         card = os.path.join(writer.state_dir, "empty0.qcow2")
         command = " ".join([
             "${qemuCommon.qemuBinary pkgs.qemu_test}", "-m", "1024",
-            "-bios", "${pkgs.ubootQemuAarch64}/u-boot.bin",
+            "-bios", "${uboot}/u-boot.bin",
             "-drive", f"file={card},if=virtio,format=qcow2",
         ])
         m = create_machine(command, name=name)
