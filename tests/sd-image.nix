@@ -132,9 +132,14 @@ pkgs.testers.runNixOSTest {
             assert host_key.split()[1] in out
 
         with subtest("Wi-Fi networks reach wpa_supplicant, readable only by it"):
-            assert card.succeed("stat -c '%a %U %G' /run/stateless-wifi/networks.conf").strip() == "640 root wpa_supplicant"
+            perms = card.succeed("stat -c '%a %U %G' /run/stateless-wifi/networks.conf").strip()
+            assert perms == "640 root wpa_supplicant", perms
             card.succeed("grep -q 'ssid=\"TestNet\"' /run/stateless-wifi/networks.conf")
-            assert "-I /run/stateless-wifi/networks.conf" in card.succeed("systemctl cat wpa_supplicant.service")
+            # The flags are in the unit's generated start script, not the unit.
+            start = card.succeed(
+                "systemctl show -P ExecStart wpa_supplicant.service | grep -o 'path=[^ ;]*' | cut -d= -f2"
+            ).strip()
+            assert "-I /run/stateless-wifi/networks.conf" in card.succeed(f"cat {start}"), f"no -I in {start}"
 
         with subtest("state survives a reboot, the rest does not"):
             card.succeed("touch /root/kept /etc/ephemeral")
