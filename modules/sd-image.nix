@@ -143,7 +143,8 @@ in
       systemd.services.expand-root-partition.script = lib.mkForce ''
         nixPart=$(${lib.getExe' pkgs.util-linux "findmnt"} -n -o SOURCE /nix)
         bootDevice=$(${lib.getExe' pkgs.util-linux "lsblk"} -npo PKNAME "$nixPart")
-        partNum=$(${lib.getExe' pkgs.util-linux "lsblk"} -npo MAJ:MIN "$nixPart" | ${lib.getExe pkgs.gawk} -F: '{print $2}')
+        # From sysfs: lsblk pads MAJ:MIN, which left "2  " for sfdisk -N.
+        partNum=$(cat "/sys/class/block/$(basename "$nixPart")/partition")
         echo "growing partition $partNum of $bootDevice ($nixPart)"
         echo ",+," | ${lib.getExe' pkgs.util-linux "sfdisk"} -N"$partNum" --no-reread "$bootDevice"
         ${lib.getExe' pkgs.parted "partprobe"}
