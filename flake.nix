@@ -49,7 +49,11 @@
       nixosModules = {
         default = {
           imports = [
-            impermanence.nixosModules.impermanence
+            # By path rather than impermanence.nixosModules.impermanence (an
+            # imported function): the module system deduplicates paths, so a
+            # configuration that also imports impermanence this way loads it
+            # once instead of declaring its options twice.
+            "${impermanence}/nixos.nix"
             disko.nixosModules.disko
             ./modules/stateless.nix
             ./modules/disk.nix
