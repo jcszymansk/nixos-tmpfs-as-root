@@ -86,7 +86,9 @@ pkgs.testers.runNixOSTest {
             print(out)
             assert status == 0, f"flash-sd exited with {status}"
             assert "machine-id: " in out
-            writer.succeed("mount /dev/disk/by-label/NIX /mnt")
+            # The partition itself: udev may not have made the by-label links yet.
+            assert "card filesystem: /dev/vdb2" in out
+            writer.succeed("mount /dev/vdb2 /mnt")
             assert writer.succeed("stat -c %a /mnt/persist/etc/wpa_supplicant/networks.conf").strip() == "600"
             writer.succeed("grep -q 'ssid=\"TestNet\"' /mnt/persist/etc/wpa_supplicant/networks.conf")
             writer.fail("grep -r -F '${passphrase}' /mnt/persist")
