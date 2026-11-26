@@ -29,7 +29,15 @@ let
     in
     failed != [ ] && lib.all (m: lib.hasInfix pattern m) failed;
 
+  /**
+    True when an assertion matching `pattern` fails, whatever else fails
+    alongside it.
+  */
+  failsIncluding = pattern: system: lib.any (lib.hasInfix pattern) (failedAssertions system);
+
   cfg = example.config;
+
+  rpi3 = self.nixosConfigurations.example-rpi3;
 
   thisSystem = cfg.nixpkgs.hostPlatform.system;
   otherSystem = if thisSystem == "x86_64-linux" then "aarch64-linux" else "x86_64-linux";
@@ -193,6 +201,27 @@ let
         target = mkSystem { nixpkgs.hostPlatform = lib.mkForce otherSystem; };
         modules = [ { nixpkgs.hostPlatform = lib.mkForce thisSystem; } ];
       }
+    );
+
+    rpi3-example-has-no-failed-assertions = failedAssertions rpi3 == [ ];
+
+    rpi3-card-is-mounted-at-nix-under-tmpfs =
+      rpi3.config.fileSystems."/".fsType == "tmpfs"
+      && rpi3.config.fileSystems."/nix".device == "/dev/disk/by-label/NIX"
+      && rpi3.config.fileSystems."/boot".device == "/nix/boot";
+
+    rpi3-ships-only-its-own-firmware =
+      let
+        names = map (p: p.pname or p.name) (lib.concatLists rpi3.options.hardware.firmware.definitions);
+      in
+      !rpi3.config.hardware.enableRedistributableFirmware
+      && lib.elem "raspberrypi-wireless-firmware" names
+      && !lib.any (lib.hasPrefix "linux-firmware") names;
+
+    rpi3-wifi-reads-the-runtime-networks-file = lib.elem "/run/stateless-wifi/networks.conf" rpi3.config.networking.wireless.extraConfigFiles;
+
+    sd-image-rejects-persistence-off-the-card = failsIncluding "must be under /nix" (
+      rpi3.extendModules { modules = [ { stateless.persistPath = lib.mkForce "/persist"; } ]; }
     );
 
     installer-has-no-zfs = !((installerFor example).boot.supportedFilesystems.zfs or false);

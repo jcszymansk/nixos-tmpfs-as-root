@@ -203,6 +203,9 @@
             touch $out
           '';
         }
+        // lib.optionalAttrs (system == "aarch64-linux") {
+          sd-image = import ./tests/sd-image.nix { inherit pkgs self; };
+        }
       );
 
       formatter = forAllSystems (_: pkgs: pkgs.nixfmt-tree);
