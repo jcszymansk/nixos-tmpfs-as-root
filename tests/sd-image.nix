@@ -78,10 +78,13 @@ pkgs.testers.runNixOSTest {
             writer.succeed("printf '%s\\n' '${passphrase}' > /run/psk")
             writer.fail("flash-sd --yes ${imageFile} /dev/vdb1")
             writer.fail("flash-sd --yes --wifi-psk-file /run/psk ${imageFile} /dev/vdb")
-            out = writer.succeed(
+            # execute, not succeed: the flasher's own output is the only
+            # useful diagnostic when it fails.
+            status, out = writer.execute(
                 "flash-sd --yes --wifi-ssid TestNet --wifi-psk-file /run/psk ${imageFile} /dev/vdb 2>&1"
             )
             print(out)
+            assert status == 0, f"flash-sd exited with {status}"
             assert "machine-id: " in out
             writer.succeed("mount /dev/disk/by-label/NIX /mnt")
             assert writer.succeed("stat -c %a /mnt/persist/etc/wpa_supplicant/networks.conf").strip() == "600"
