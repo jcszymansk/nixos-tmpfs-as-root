@@ -44,6 +44,8 @@ pkgs.testers.runNixOSTest {
   name = "stateless-sd-image";
 
   nodes.writer = {
+    # See the card's DefaultDeviceTimeoutSec above.
+    systemd.settings.Manager.DefaultDeviceTimeoutSec = lib.mkForce "15min";
     virtualisation.emptyDiskImages = [ 4096 ];
     virtualisation.memorySize = 1024;
     environment.systemPackages = [ flasher ];
