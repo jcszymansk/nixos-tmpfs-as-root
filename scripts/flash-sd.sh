@@ -154,11 +154,30 @@ else
   dd if="$image" of="$device" bs=4M conv=fsync status=progress || die "writing the image failed"
 fi
 blockdev --rereadpt "$device" || die "the kernel did not re-read the partition table of $device"
-udevadm settle
 
-nix_part=$(lsblk -lnpo NAME,LABEL "$device" | awk -v l="$label" '$2 == l { print $1 }')
-[[ -n $nix_part ]] || die "no partition labelled $label on $device after writing; is this the right image?"
+# Partition nodes come from devtmpfs as soon as the table is re-read, and
+# blkid -p probes the label from the device itself, so neither waits for
+# udev (whose queue can take minutes on a slow or busy machine).
+find_labelled_partitions() {
+  local part
+  for part in $(lsblk -lnpo NAME,TYPE "$device" | awk '$2 == "part" { print $1 }'); do
+    if [[ -b $part && $(blkid -p -o value -s LABEL "$part" 2>/dev/null) == "$label" ]]; then
+      echo "$part"
+    fi
+  done
+}
+
+nix_part=""
+for _ in $(seq 1 60); do
+  nix_part=$(find_labelled_partitions)
+  if [[ -n $nix_part ]]; then
+    break
+  fi
+  sleep 1
+done
+[[ -n $nix_part ]] || die "no partition labelled $label on $device within 60 s of writing; is this the right image?"
 [[ $(wc -l <<<"$nix_part") -eq 1 ]] || die "more than one partition labelled $label on $device"
+log "card filesystem: $nix_part"
 
 # ------------------------------------------------------------ seed the card
 
